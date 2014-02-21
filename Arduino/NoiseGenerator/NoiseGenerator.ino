@@ -1,16 +1,21 @@
-#define PWM_FREQ 0x014D // 16MHz/333 ~= 48048 -- 14D
+#define FREQ_CPU 16000000
+#define PWM_FREQ 0x00FF // 16MHz/333 ~= 48048 -- 14D
                         // 16MHz/362 ~= 44199 -- 16A
 #define PWM_MODE 1 // Fast (1) or Phase Correct (0)
 #define PWM_QTY 2 // number of pwms, either 1 or 2
 
 #define ITER_GAUSS 12 //Nombre d'itération pour l'approximation de la loi normale (12 par défaut)
 
-unsigned char a,b,c;
-unsigned char x=0;
+uint8_t a,b,c;
+uint8_t x=0;
 float vol=1; //Amplification de la sortie (Volume)
-void (*GenBruit)(char* R, char* L, float* A) = bBlancUnif;
+void (*GenBruit)(uint8_t* R, uint8_t* L, float* A);
 
 void setup() {
+  cli();
+  
+  GenBruit = bBlancUnif;
+  
   // setup PWM
   TCCR1A = (((PWM_QTY - 1) << 5) | 0x80 | (PWM_MODE << 1)); // 
   TCCR1B = ((PWM_MODE << 3) | 0x11); // ck/1
@@ -28,37 +33,47 @@ void setup() {
 void loop() {
   while(1)
   {
-    delay(5000);
+    delay(1000);
+    cli();
     GenBruit=bBlancGauss;
-    delay(5000);
+    sei();
+    delay(1000);
+    cli();
     GenBruit=bBlancUnif;
+    sei();
   }
 }
 
 ISR(TIMER1_CAPT_vect) {
   //OCR1AH et OCR1BH ne sont pas utiles car la PWM a une résolution de 8 bits
-  char R, L;
+  uint8_t R, L;
   GenBruit(&R, &L, &vol);
   OCR1AL = R;
   OCR1BL = L;
 }
 
+/** Fonctions **/
+void ModulationVolume(float* A, uint16_t* Freq_mHz, uint16_t* i)
+{
+//  FREQ_CPU/PWM_FREQ
+}
+
 /** Algorithme génération de bruit **/
 //Bruit blanc uniforme
-void bBlancUnif(char* R, char* L, float* A)
+void bBlancUnif(uint8_t* R, uint8_t* L, float* A)
 {
   *R = (*A)*randomize();
   *L = (*A)*randomize();
 }
 
 //Bruit blanc gaussien
-void bBlancGauss(char* R, char* L, float* A)
+void bBlancGauss(uint8_t* R, uint8_t* L, float* A)
 {
-  char i;
+  uint8_t i;
   uint16_t tempR=0;
   uint16_t tempL=0;
   
-  for(i=0;i<ITER_GAUSS;i++)
+  for(i=1;i<=ITER_GAUSS;i++)
   {
     tempR += randomize();
     tempL += randomize();
@@ -110,7 +125,7 @@ float sinC(float beta, int n)
 
 
 /** Generateur de nombre pseudo aléatoire **/
-void init_rng(unsigned char s1,unsigned char s2,unsigned char s3) //Can also be used to seed the rng with more entropy during use.
+void init_rng(uint8_t s1,uint8_t s2,uint8_t s3) //Can also be used to seed the rng with more entropy during use.
 {
 	//XOR new entropy into key state
 	a ^=s1;
@@ -123,7 +138,7 @@ void init_rng(unsigned char s1,unsigned char s2,unsigned char s3) //Can also be 
 	c = (c+(b>>1)^a);
 }
 
-unsigned char randomize()
+uint8_t randomize()
 {
 	x++;               //x is incremented every round and is not affected by any other variable
 	a = (a^c^x);       //note the mix of addition and XOR
